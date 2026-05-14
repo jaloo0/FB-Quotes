@@ -25,8 +25,31 @@ OUTPUT_DIR = Path("tmp_assets")
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _load_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    # 1. Try preferred custom font
     if FONT_PATH.exists():
-        return ImageFont.truetype(str(FONT_PATH), size)
+        try:
+            return ImageFont.truetype(str(FONT_PATH), size)
+        except Exception:
+            pass
+
+    # 2. Try common system fonts with absolute paths
+    fallbacks = [
+        "C:\\Windows\\Fonts\\arialbd.ttf", # Windows Bold
+        "C:\\Windows\\Fonts\\arial.ttf",   # Windows
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", # Linux
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "arial.ttf",
+        "DejaVuSans.ttf"
+    ]
+    
+    for f in fallbacks:
+        try:
+            return ImageFont.truetype(f, size)
+        except Exception:
+            continue
+
+    # 3. Last resort (will be very small and not scalable)
+    logger.warning("!!! CRITICAL: No TTF fonts found. Text will be 10px and likely INVISIBLE on high-res images.")
     return ImageFont.load_default()
 
 
@@ -83,9 +106,21 @@ def _draw_text_centered(
     stroke_width: int = 2,
 ) -> None:
     cx, cy = center_xy
-    line_h = font.size + 8
+    
+    # Try to get line height from a sample bbox
+    try:
+        sample_bbox = draw.textbbox((0, 0), "Ay|", font=font)
+        line_h = (sample_bbox[3] - sample_bbox[1]) + 15
+    except Exception:
+        line_h = 40
+    
     total_h = line_h * len(lines)
     start_y = cy - total_h // 2
+
+    logger.info("Drawing %d lines of text at %s (line_h %d)", len(lines), center_xy, line_h)
+
+    # DEBUG WATERMARK
+    draw.text((10, 10), "MODIFIED BY ENGINE", fill=(255, 0, 0))
 
     for i, line in enumerate(lines):
         bbox = draw.textbbox((0, 0), line, font=font)
