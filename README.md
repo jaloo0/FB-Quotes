@@ -47,7 +47,7 @@ Go to **Repo → Settings → Secrets and variables → Actions → New reposito
 | Secret Name | Where to get it |
 |-------------|-----------------|
 | `PEXELS_API_KEY` | [pexels.com/api](https://www.pexels.com/api/) — Free |
-| `GEMINI_API_KEY` | [aistudio.google.com](https://aistudio.google.com/app/apikey) — Free |
+| `OPENROUTER_API_KEY` | [openrouter.ai/keys](https://openrouter.ai/keys) — Free models available |
 | `FB_PAGE_ID` | Facebook Page → About → Page ID |
 | `FB_PAGE_ACCESS_TOKEN` | [developers.facebook.com](https://developers.facebook.com/) → Graph API Explorer → long-lived page token |
 
@@ -72,7 +72,7 @@ pip install -r requirements.txt
 
 # Set env vars (PowerShell)
 $env:PEXELS_API_KEY       = "your_key"
-$env:GEMINI_API_KEY       = "your_key"
+$env:OPENROUTER_API_KEY   = "your_key"
 $env:FB_PAGE_ID           = "your_page_id"
 $env:FB_PAGE_ACCESS_TOKEN = "your_token"
 
