@@ -1,20 +1,19 @@
 """
 style_engine.py
 ---------------
-Applies one of three high-end visual styles to (image_path, quote_text):
+Three high-end visual styles for the FB-Quotes project:
 
-  Style A – "Inverted Cursor"   : XOR-inverted text colour per pixel
-  Style B – "Subject Sandwich"  : rembg subject isolation, text behind hero
-  Style C – "Frosted Depth"     : blurred BG + sharp subject, text overlay
-
-Returns the path to the finished composite image.
+1. The "Big Left"        : Bold, heavy fonts stacked on the left (Magazine style).
+2. The "Cinematic Sub"   : Small clean text at bottom + subtle vignette (Film style).
+3. The "Giant Invert"    : Massive XOR-inverted text (Abstract vibe style).
 """
 
 import random
 import logging
+import os
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 import numpy as np
 import requests
 
@@ -26,6 +25,7 @@ OUTPUT_DIR = Path("tmp_assets")
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _load_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    """Loads Outfit-Bold or falls back to system fonts / download."""
     # 1. Try preferred custom font
     if FONT_PATH.exists():
         try:
@@ -49,7 +49,7 @@ def _load_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
         except Exception:
             continue
 
-    # 3. Try to download a font if all else fails (GitHub Actions fallback)
+    # 3. Try to download a font if all else fails
     try:
         FONT_PATH.parent.mkdir(parents=True, exist_ok=True)
         if not FONT_PATH.exists():
@@ -62,35 +62,27 @@ def _load_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     except Exception as e:
         logger.warning("Font download failed: %s", e)
 
-    # 4. Last resort (will be very small and not scalable)
-    logger.warning("!!! CRITICAL: No TTF fonts found. Text will be 10px and likely INVISIBLE on high-res images.")
+    # 4. Last resort
+    logger.warning("!!! CRITICAL: No TTF fonts found. Using tiny default.")
     return ImageFont.load_default()
 
 
 def _canonical_size(img: Image.Image, target_w: int = 1080) -> Image.Image:
-    """Resize to FB-friendly 1080-wide portrait while preserving ratio."""
+    """Resize to FB-friendly 1080-wide portrait (4:5 ratio)."""
     w, h = img.size
     ratio = target_w / w
     new_h = int(h * ratio)
-    # Ensure at least 1080 tall (4:5 Facebook feed minimum)
     new_h = max(new_h, int(target_w * 1.25))
     img = img.resize((target_w, new_h), Image.LANCZOS)
-    # Centre-crop to exactly 1080×1350 (4:5)
-    target_h = int(target_w * 1.25)
+    target_h = int(target_w * 1.25) # 1350
     if img.height > target_h:
         top = (img.height - target_h) // 2
         img = img.crop((0, top, target_w, top + target_h))
     return img
 
 
-def _text_position(img_size: tuple[int, int]) -> tuple[int, int]:
-    """Centre-bottom third of the image."""
-    w, h = img_size
-    return (w // 2, int(h * 0.72))
-
-
 def _wrap_text(text: str, font, max_width: int) -> list[str]:
-    """Naive word-wrap for Pillow."""
+    """Naive word-wrap."""
     lines = []
     for paragraph in text.split("\n"):
         words = paragraph.split()
@@ -110,239 +102,139 @@ def _wrap_text(text: str, font, max_width: int) -> list[str]:
     return lines
 
 
-def _draw_text_centered(
-    draw: ImageDraw.Draw,
-    lines: list[str],
-    font,
-    center_xy: tuple[int, int],
-    fill,
-    stroke_fill=None,
-    stroke_width: int = 2,
-) -> None:
-    cx, cy = center_xy
+# ── Style 1: The Big Left (Magazine) ──────────────────────────────────────────
+
+def style_big_left(img_path: Path, quote: str, out_path: Path) -> Path:
+    """Bold, heavy fonts stacked on the left."""
+    base = _canonical_size(Image.open(img_path).convert("RGB"))
+    w, h = base.size
     
-    # Try to get line height from a sample bbox
-    try:
-        sample_bbox = draw.textbbox((0, 0), "Ay|", font=font)
-        line_h = (sample_bbox[3] - sample_bbox[1]) + 15
-    except Exception:
-        line_h = 40
+    # Massive font for the left stack
+    font_size = int(w * 0.12) # ~130px
+    font = _load_font(font_size)
     
+    # Wrap to a narrow column on the left
+    lines = _wrap_text(quote, font, int(w * 0.6))
+    
+    # Draw on overlay for legibility
+    overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+    
+    # Subtle gradient/shadow from left
+    for x in range(int(w * 0.7)):
+        alpha = int(180 * (1 - (x / (w * 0.7))))
+        draw.line([(x, 0), (x, h)], fill=(0, 0, 0, alpha))
+        
+    y_start = int(h * 0.2)
+    line_h = font_size + 10
+    
+    for i, line in enumerate(lines):
+        draw.text((int(w * 0.08), y_start + i * line_h), 
+                  line.upper(), font=font, fill=(255, 255, 255, 255))
+        
+    final = Image.alpha_composite(base.convert("RGBA"), overlay).convert("RGB")
+    final.save(out_path, "JPEG", quality=92)
+    return out_path
+
+
+# ── Style 2: Cinematic Subtitle (Film) ────────────────────────────────────────
+
+def style_cinematic_sub(img_path: Path, quote: str, out_path: Path) -> Path:
+    """Small clean text at bottom + subtle vignette."""
+    base = _canonical_size(Image.open(img_path).convert("RGB"))
+    w, h = base.size
+    
+    # Subtle vignette / grey layer
+    vignette = Image.new("RGBA", base.size, (20, 20, 25, 60)) # Grey tint
+    base = Image.alpha_composite(base.convert("RGBA"), vignette).convert("RGB")
+    
+    # Draw logic
+    draw = ImageDraw.Draw(base)
+    font_size = int(w * 0.04) # ~43px (small)
+    font = _load_font(font_size)
+    
+    # Wrap for center bottom
+    lines = _wrap_text(quote, font, int(w * 0.8))
+    
+    line_h = font_size + 15
     total_h = line_h * len(lines)
-    start_y = cy - total_h // 2
-
-    logger.info("Drawing %d lines of text at %s (line_h %d)", len(lines), center_xy, line_h)
-
-    # DEBUG WATERMARK
-    draw.text((10, 10), "MODIFIED BY ENGINE", fill=(255, 0, 0))
-
+    y_start = int(h * 0.88) - total_h
+    
     for i, line in enumerate(lines):
         bbox = draw.textbbox((0, 0), line, font=font)
-        text_w = bbox[2] - bbox[0]
-        x = cx - text_w // 2
-        y = start_y + i * line_h
-        if stroke_fill:
-            draw.text((x, y), line, font=font, fill=stroke_fill,
-                      stroke_width=stroke_width, stroke_fill=stroke_fill)
-        draw.text((x, y), line, font=font, fill=fill)
+        tw = bbox[2] - bbox[0]
+        draw.text(((w - tw) // 2, y_start + i * line_h), 
+                  line, font=font, fill=(255, 255, 255, 230))
+        
+    base.save(out_path, "JPEG", quality=92)
+    return out_path
 
 
-# ── Style A: Inverted Cursor ──────────────────────────────────────────────────
+# ── Style 3: Giant Invert (Vibe) ─────────────────────────────────────────────
 
-def style_a_inverted_cursor(img_path: Path, quote: str, out_path: Path) -> Path:
-    """
-    Render text on a transparent mask, then XOR-invert text pixels
-    against the background so text is always legible.
-    """
+def style_giant_invert(img_path: Path, quote: str, out_path: Path) -> Path:
+    """Massive XOR-inverted text."""
     base = _canonical_size(Image.open(img_path).convert("RGB"))
-    font_size = max(48, base.width // 18)
+    w, h = base.size
+    
+    # Massive font
+    font_size = int(w * 0.20) # ~216px (HUGE)
+    if len(quote) > 15: font_size = int(w * 0.14)
     font = _load_font(font_size)
-
-    lines = _wrap_text(quote, font, int(base.width * 0.80))
-    center = _text_position(base.size)
-
-    # --- render text on black mask ---
-    text_mask = Image.new("L", base.size, 0)
-    mask_draw = ImageDraw.Draw(text_mask)
-    line_h = font_size + 8
+    
+    lines = _wrap_text(quote, font, int(w * 0.9))
+    
+    # Render text to mask
+    mask = Image.new("L", base.size, 0)
+    mask_draw = ImageDraw.Draw(mask)
+    
+    line_h = font_size + 5
     total_h = line_h * len(lines)
-    start_y = center[1] - total_h // 2
-    cx = center[0]
+    y_start = (h - total_h) // 2
+    
     for i, line in enumerate(lines):
         bbox = mask_draw.textbbox((0, 0), line, font=font)
         tw = bbox[2] - bbox[0]
-        x = cx - tw // 2
-        y = start_y + i * line_h
-        mask_draw.text((x, y), line, font=font, fill=255)
-
-    # --- XOR inversion per pixel ---
-    base_arr = np.array(base, dtype=np.uint8)
-    mask_arr = np.array(text_mask, dtype=np.uint8)
-    # Invert base pixels where text mask is white
+        mask_draw.text(((w - tw) // 2, y_start + i * line_h), 
+                        line.lower(), font=font, fill=255)
+        
+    # XOR Inversion
+    base_arr = np.array(base)
+    mask_arr = np.array(mask)
     text_px = mask_arr > 128
-    result_arr = base_arr.copy()
-    result_arr[text_px] = 255 - base_arr[text_px]
-
-    result = Image.fromarray(result_arr, "RGB")
-
-    # --- light semi-transparent backdrop for readability ---
-    overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
-    ov_draw = ImageDraw.Draw(overlay)
-    pad = 20
-    box_top = start_y - pad
-    box_bot = start_y + total_h + pad
-    ov_draw.rectangle(
-        [(cx - base.width // 2, box_top), (cx + base.width // 2, box_bot)],
-        fill=(0, 0, 0, 60),
-    )
-    composite = Image.alpha_composite(result.convert("RGBA"), overlay).convert("RGB")
-
-    composite.save(out_path, "JPEG", quality=92)
-    logger.info("Style A saved: %s", out_path)
-    return out_path
-
-
-# ── Style B: Subject Sandwich ─────────────────────────────────────────────────
-
-def style_b_subject_sandwich(img_path: Path, quote: str, out_path: Path) -> Path:
-    """
-    Layers: background → text → isolated subject on top.
-    Uses rembg to remove background from the subject.
-    Falls back to Style C if rembg is unavailable.
-    """
-    try:
-        from rembg import remove as rembg_remove  # pip install rembg
-    except ImportError:
-        logger.warning("rembg not installed – falling back to Style C.")
-        return style_c_frosted_depth(img_path, quote, out_path)
-
-    base = _canonical_size(Image.open(img_path).convert("RGB"))
-    font_size = max(52, base.width // 16)
-    font = _load_font(font_size)
-
-    # --- isolate subject ---
-    subject_rgba = rembg_remove(base.convert("RGBA"))
-
-    # --- compose background (slightly darkened) ---
-    bg = base.copy().convert("RGBA")
-    dark_overlay = Image.new("RGBA", base.size, (0, 0, 0, 100))
-    bg = Image.alpha_composite(bg, dark_overlay)
-
-    # --- draw text on background ---
-    lines = _wrap_text(quote, font, int(base.width * 0.82))
-    center = _text_position(base.size)
-    text_layer = bg.copy()
-    draw = ImageDraw.Draw(text_layer)
-    _draw_text_centered(
-        draw, lines, font,
-        center_xy=center,
-        fill=(255, 255, 255, 240),
-        stroke_fill=(0, 0, 0, 255),
-        stroke_width=3,
-    )
-
-    # --- place subject on top ---
-    final = Image.alpha_composite(text_layer, subject_rgba)
-    final.convert("RGB").save(out_path, "JPEG", quality=92)
-    logger.info("Style B saved: %s", out_path)
-    return out_path
-
-
-# ── Style C: Frosted Depth ────────────────────────────────────────────────────
-
-def style_c_frosted_depth(img_path: Path, quote: str, out_path: Path) -> Path:
-    """
-    Blurs background (Gaussian radius ≈ 12 → ~40% blur) but keeps
-    subject sharp via a luminance-driven focus mask.
-    """
-    base = _canonical_size(Image.open(img_path).convert("RGB"))
-    font_size = max(52, base.width // 16)
-    font = _load_font(font_size)
-
-    # --- blur the full frame ---
-    blurred = base.filter(ImageFilter.GaussianBlur(radius=12))
-
-    # --- create a simple radial focus mask (centre stays sharp) ---
-    w, h = base.size
-    mask = Image.new("L", (w, h), 0)
-    mask_draw = ImageDraw.Draw(mask)
-    # Large ellipse in centre = sharp zone
-    margin_x, margin_y = int(w * 0.15), int(h * 0.10)
-    mask_draw.ellipse(
-        [(margin_x, margin_y), (w - margin_x, h - margin_y)],
-        fill=255,
-    )
-    mask = mask.filter(ImageFilter.GaussianBlur(radius=80))
-
-    # --- composite: blurred where mask=0, sharp where mask=255 ---
-    depth = Image.composite(base, blurred, mask)
-
-    # --- frosted glass text bar ---
-    bar_h = int(h * 0.28)
-    bar_top = int(h * 0.62)
-    bar_region = depth.crop((0, bar_top, w, bar_top + bar_h))
-    bar_blurred = bar_region.filter(ImageFilter.GaussianBlur(radius=20))
-
-    bar_overlay = Image.new("RGBA", (w, bar_h), (10, 10, 20, 160))
-    bar_comp = Image.alpha_composite(bar_blurred.convert("RGBA"), bar_overlay)
-    depth.paste(bar_comp.convert("RGB"), (0, bar_top))
-
-    # --- draw text ---
-    lines = _wrap_text(quote, font, int(w * 0.82))
-    center = (w // 2, bar_top + bar_h // 2)
-    draw = ImageDraw.Draw(depth)
-    _draw_text_centered(
-        draw, lines, font,
-        center_xy=center,
-        fill=(255, 255, 255),
-        stroke_fill=(0, 0, 0),
-        stroke_width=2,
-    )
-
-    depth.save(out_path, "JPEG", quality=92)
-    logger.info("Style C saved: %s", out_path)
+    
+    res_arr = base_arr.copy()
+    # Invert RGB channels
+    res_arr[text_px] = 255 - base_arr[text_px]
+    
+    final = Image.fromarray(res_arr)
+    final.save(out_path, "JPEG", quality=92)
     return out_path
 
 
 # ── Dispatcher ────────────────────────────────────────────────────────────────
 
 STYLES = {
-    "A": style_a_inverted_cursor,
-    "B": style_b_subject_sandwich,
-    "C": style_c_frosted_depth,
+    "BigLeft": style_big_left,
+    "CinematicSub": style_cinematic_sub,
+    "GiantInvert": style_giant_invert,
 }
-
 
 def apply_random_style(img_path: Path, quote: str, run_id: str) -> Path:
     """Pick a random style, apply it, return output path."""
-    available_styles = list(STYLES.keys())
-    style_key = random.choice(available_styles)
-    
-    # Check if rembg is available for Style B
-    try:
-        import rembg # noqa: F401
-    except ImportError:
-        if style_key == "B":
-            logger.info("Style B chosen but rembg missing. Forcing Style A or C.")
-            style_key = random.choice(["A", "C"])
-
+    style_key = random.choice(list(STYLES.keys()))
     style_fn = STYLES[style_key]
+    
     OUTPUT_DIR.mkdir(exist_ok=True)
-    out_path = OUTPUT_DIR / f"final_{run_id}_style{style_key}.jpg"
+    out_path = OUTPUT_DIR / f"final_{run_id}_{style_key}.jpg"
     
-    logger.info("🎨 APPLYING STYLE: %s", style_key)
+    logger.info("🎨 Applying Style: %s", style_key)
+    result = style_fn(img_path, quote, out_path)
     
-    result_path = style_fn(img_path, quote, out_path)
+    # Add a tiny debug watermark if needed (can be removed later)
+    # final_img = Image.open(result).convert("RGB")
+    # d = ImageDraw.Draw(final_img)
+    # d.text((10, 10), style_key, fill=(255, 0, 0))
+    # final_img.save(result)
     
-    # Final watermark on the finished file
-    try:
-        final_img = Image.open(result_path).convert("RGB")
-        d = ImageDraw.Draw(final_img)
-        # Use a big red box for the watermark so it's impossible to miss
-        d.rectangle([0, 0, 300, 40], fill=(255, 0, 0))
-        d.text((10, 10), f"STYLE {style_key} ACTIVE", fill=(255, 255, 255))
-        final_img.save(result_path, "JPEG", quality=95)
-    except Exception as e:
-        logger.error("Watermark failed: %s", e)
-        
-    return result_path
+    return result

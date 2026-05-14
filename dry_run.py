@@ -25,9 +25,9 @@ from pipeline.vibe_engine import roll_vibe, get_search_term, get_quote, tags_mat
 from pipeline.image_fetcher import fetch_image_for_vibe
 from pipeline.ai_quote_finisher import get_ai_quote
 from pipeline.style_engine import (
-    style_a_inverted_cursor,
-    style_b_subject_sandwich,
-    style_c_frosted_depth,
+    style_big_left,
+    style_cinematic_sub,
+    style_giant_invert,
     OUTPUT_DIR,
 )
 
@@ -63,9 +63,9 @@ def main():
 
     # Apply ALL three styles for comparison
     paths = {}
-    paths["A"] = style_a_inverted_cursor(img_path, quote, OUTPUT_DIR / f"test_{run_id}_A.jpg")
-    paths["B"] = style_b_subject_sandwich(img_path, quote, OUTPUT_DIR / f"test_{run_id}_B.jpg")
-    paths["C"] = style_c_frosted_depth(img_path, quote, OUTPUT_DIR / f"test_{run_id}_C.jpg")
+    paths["BigLeft"] = style_big_left(img_path, quote, OUTPUT_DIR / f"test_{run_id}_BigLeft.jpg")
+    paths["CinematicSub"] = style_cinematic_sub(img_path, quote, OUTPUT_DIR / f"test_{run_id}_CinematicSub.jpg")
+    paths["GiantInvert"] = style_giant_invert(img_path, quote, OUTPUT_DIR / f"test_{run_id}_GiantInvert.jpg")
 
     print("\n✅ Dry run complete. Output files:")
     for style, p in paths.items():
