@@ -25,8 +25,12 @@ def upload_to_temp(image_path: str) -> str:
         resp = requests.post(url, files=files, data=params, timeout=30)
         
     resp.raise_for_status()
-    data = resp.json()
-    
+    try:
+        data = resp.json()
+    except Exception:
+        logger.error("Failed to decode JSON from file.io. Status: %d, Content: %r", resp.status_code, resp.text)
+        raise
+
     if data.get("success"):
         link = data.get("link")
         logger.info("Temporary link: %s", link)
