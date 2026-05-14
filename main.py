@@ -37,7 +37,8 @@ from pipeline.vibe_engine import (
 from pipeline.image_fetcher import fetch_image_for_vibe
 from pipeline.ai_quote_finisher import get_ai_quote
 from pipeline.style_engine import apply_random_style
-from pipeline.fb_poster import post_photo
+# from pipeline.fb_poster import post_photo  # FB Disconnected
+from pipeline.temp_uploader import upload_to_temp
 
 TMP_DIR = Path("tmp_assets")
 
@@ -86,12 +87,15 @@ def run():
     final_img = apply_random_style(img_path, quote, run_id)
     logger.info("Final image: %s", final_img)
 
-    # ── 5. Post to Facebook ───────────────────────────────────────────────────
+    # ── 5. Upload to Temp Storage ─────────────────────────────────────────────
     try:
-        post_photo(str(final_img), quote, vibe)
-        logger.info("Posted successfully.")
+        # post_photo(str(final_img), quote, vibe)
+        # logger.info("Posted successfully.")
+        link = upload_to_temp(str(final_img))
+        print(f"\n🚀 TEST UPLOAD SUCCESSFUL!")
+        print(f"🔗 View your image here: {link}\n")
     except Exception as exc:  # noqa: BLE001
-        logger.error("Facebook post failed: %s", exc)
+        logger.error("Upload failed: %s", exc)
 
     # ── 6. Cleanup ────────────────────────────────────────────────────────────
     cleanup()

@@ -53,7 +53,12 @@ def post_photo(image_path: str, caption: str, vibe: str) -> dict:
             timeout=30,
         )
 
-    resp.raise_for_status()
+    try:
+        resp.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        logger.error("Facebook API Error: %s", resp.text)
+        raise e
+        
     result = resp.json()
     logger.info("Posted to Facebook: %s", result)
     return result
