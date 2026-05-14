@@ -1,102 +1,126 @@
 """
 temp_uploader.py
 ----------------
-Multi-service temporary uploader. Tries multiple providers to ensure
-the user gets a test link even if one service is down.
-Providers: Catbox, GoFile, File.io
+Multi-service temporary uploader based on the user's preferred flow.
+Tries Pixeldrain -> GoFile -> Litterbox -> File.io
 """
 
-import logging
-import requests
 import os
+import requests
+import logging
 
 logger = logging.getLogger(__name__)
 
-def upload_catbox(image_path: str) -> str | None:
-    """Upload to catbox.moe - very reliable for images."""
-    url = "https://catbox.moe/user/api.php"
+def upload_pixeldrain(file_path: str, filename: str) -> str | None:
+    """PRIMARY: pixeldrain.com"""
+    logger.info("📤 Attempting upload to pixeldrain.com...")
     try:
-        logger.info("Trying Catbox.moe...")
-        with open(image_path, "rb") as f:
-            data = {"reqtype": "fileupload"}
-            files = {"fileToUpload": f}
-            resp = requests.post(url, data=data, files=files, timeout=30)
-        
-        if resp.status_code == 200 and "https://" in resp.text:
-            link = resp.text.strip()
-            logger.info("Catbox link: %s", link)
+        with open(file_path, "rb") as f:
+            response = requests.put(
+                f"https://pixeldrain.com/api/file/{filename}",
+                data=f,
+                headers={"Content-Type": "application/octet-stream"},
+                timeout=300
+            )
+        if response.status_code == 201:
+            file_id = response.json().get("id")
+            link = f"https://pixeldrain.com/u/{file_id}"
+            logger.info(f"✅ Pixeldrain Success: {link}")
             return link
     except Exception as e:
-        logger.warning("Catbox failed: %s", e)
+        logger.warning(f"⚠️ Pixeldrain failed: {e}")
     return None
 
-def upload_gofile(image_path: str) -> str | None:
-    """Upload to GoFile.io - robust and professional."""
+def upload_gofile(file_path: str, filename: str) -> str | None:
+    """FALLBACK 1: GoFile"""
+    logger.info("☁️ Attempting upload to GoFile...")
     try:
-        logger.info("Trying GoFile.io...")
-        # 1. Get best server
-        server_resp = requests.get("https://api.gofile.io/getServer", timeout=10)
-        server_resp.raise_for_status()
-        server = server_resp.json()["data"]["server"]
-        
-        # 2. Upload
-        url = f"https://{server}.gofile.io/uploadFile"
-        with open(image_path, "rb") as f:
-            files = {"file": f}
-            resp = requests.post(url, files=files, timeout=40)
-        
-        resp.raise_for_status()
-        data = resp.json()
-        if data["status"] == "ok":
-            link = data["data"]["downloadPage"]
-            logger.info("GoFile link: %s", link)
-            return link
-    except Exception as e:
-        logger.warning("GoFile failed: %s", e)
-    return None
-
-def upload_file_io(image_path: str) -> str | None:
-    """Upload to file.io - tries to fix the previous issue."""
-    url = "https://file.io"
-    try:
-        logger.info("Trying File.io...")
-        with open(image_path, "rb") as f:
-            files = {"file": (os.path.basename(image_path), f, "image/jpeg")}
-            resp = requests.post(url, files=files, timeout=20)
-        
-        # If we got HTML (Gatsby), it failed
-        if "<html>" in resp.text:
-            logger.warning("File.io returned HTML instead of API response.")
-            return None
+        server_response = requests.get("https://api.gofile.io/servers", timeout=10).json()
+        if server_response.get("status") == "ok":
+            server = server_response["data"]["servers"][0]["name"]
+            upload_url = f"https://{server}.gofile.io/contents/uploadfile"
             
-        data = resp.json()
-        if data.get("success"):
-            return data.get("link")
+            with open(file_path, "rb") as f:
+                response = requests.post(
+                    upload_url,
+                    files={"file": (filename, f)},
+                    timeout=300
+                ).json()
+            
+            if response.get('status') == 'ok':
+                link = response['data']['downloadPage']
+                logger.info(f"✅ GoFile Success: {link}")
+                return link
     except Exception as e:
-        logger.warning("File.io failed: %s", e)
+        logger.warning(f"⚠️ GoFile failed: {e}")
     return None
 
-def upload_to_temp(image_path: str) -> str:
-    """Tries multiple services until one works."""
-    # Priority order: Catbox (direct image link) > GoFile (nice UI) > File.io
-    providers = [upload_catbox, upload_gofile, upload_file_io]
+def upload_litterbox(file_path: str, filename: str) -> str | None:
+    """FALLBACK 2: litterbox.catbox.moe (72h expiry)"""
+    logger.info("📦 Attempting upload to litterbox.catbox.moe...")
+    try:
+        with open(file_path, "rb") as f:
+            response = requests.post(
+                "https://litterbox.catbox.moe/resources/internals/api.php",
+                data={"reqtype": "fileupload", "time": "72h"},
+                files={"fileToUpload": (filename, f)},
+                timeout=300
+            )
+        if response.status_code == 200:
+            link = response.text.strip()
+            logger.info(f"✅ Litterbox Success: {link}")
+            return link
+    except Exception as e:
+        logger.warning(f"⚠️ Litterbox failed: {e}")
+    return None
+
+def upload_file_io(file_path: str, filename: str) -> str | None:
+    """FALLBACK 3: file.io (1 download, 2 weeks expiry)"""
+    logger.info("📁 Attempting upload to file.io...")
+    try:
+        with open(file_path, "rb") as f:
+            response = requests.post(
+                "https://file.io",
+                files={"file": (filename, f)},
+                timeout=300
+            ).json()
+        if response.get("success"):
+            link = response["link"]
+            logger.info(f"✅ file.io Success: {link}")
+            return link
+    except Exception as e:
+        logger.warning(f"⚠️ file.io failed: {e}")
+    return None
+
+def upload_to_temp(file_path: str) -> str:
+    """Main entry point: tries all providers in order."""
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"File not found: {file_path}")
+
+    filename = os.path.basename(file_path)
+    
+    providers = [
+        upload_pixeldrain,
+        upload_gofile,
+        upload_litterbox,
+        upload_file_io
+    ]
     
     for provider in providers:
-        link = provider(image_path)
+        link = provider(file_path, filename)
         if link:
             return link
             
-    raise Exception("All temporary upload services failed.")
+    raise Exception("❌ All temporary uploaders failed.")
 
 if __name__ == "__main__":
     import sys
     if len(sys.argv) < 2:
-        print("Usage: python temp_uploader.py <path_to_image>")
+        print("Usage: python temp_uploader.py <file_path>")
     else:
-        logging.basicConfig(level=logging.INFO)
-        p = os.path.abspath(sys.argv[1])
+        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
         try:
-            link = upload_to_temp(p)
-            print(f"\n✅ SUCCESS: {link}")
+            res = upload_to_temp(sys.argv[1])
+            print(f"Final Link: {res}")
         except Exception as e:
-            print(f"\n❌ ERROR: {e}")
+            print(e)
