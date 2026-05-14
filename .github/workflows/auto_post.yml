@@ -1,0 +1,54 @@
+name: 🎨 FB Quotes Auto-Post
+
+on:
+  schedule:
+    # Run every 12 hours  (00:00 UTC and 12:00 UTC)
+    - cron: "0 0,12 * * *"
+  workflow_dispatch: {}    # Manual trigger from GitHub UI
+
+jobs:
+  post:
+    name: Generate & Post
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # ── Checkout ────────────────────────────────────────────────────────────
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      # ── Python setup ────────────────────────────────────────────────────────
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      # ── System deps for rembg / Pillow ──────────────────────────────────────
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libgl1 libglib2.0-0 libsm6 libxrender1 libxext6
+
+      # ── Python deps ─────────────────────────────────────────────────────────
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      # ── Run pipeline ────────────────────────────────────────────────────────
+      - name: Run FB-Quotes pipeline
+        env:
+          PEXELS_API_KEY:        ${{ secrets.PEXELS_API_KEY }}
+          GEMINI_API_KEY:        ${{ secrets.GEMINI_API_KEY }}
+          FB_PAGE_ID:            ${{ secrets.FB_PAGE_ID }}
+          FB_PAGE_ACCESS_TOKEN:  ${{ secrets.FB_PAGE_ACCESS_TOKEN }}
+        run: python main.py
+
+      # ── Upload artefact on failure (debug) ──────────────────────────────────
+      - name: Upload tmp_assets on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-assets-${{ github.run_id }}
+          path: tmp_assets/
+          retention-days: 3

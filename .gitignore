@@ -1,0 +1,11 @@
+tmp_assets/
+*.jpg
+*.jpeg
+*.png
+__pycache__/
+*.pyc
+.env
+*.egg-info/
+dist/
+build/
+.DS_Store
