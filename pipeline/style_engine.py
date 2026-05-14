@@ -16,6 +16,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 import numpy as np
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,20 @@ def _load_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
         except Exception:
             continue
 
-    # 3. Last resort (will be very small and not scalable)
+    # 3. Try to download a font if all else fails (GitHub Actions fallback)
+    try:
+        FONT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        if not FONT_PATH.exists():
+            logger.info("Downloading fallback font...")
+            url = "https://github.com/google/fonts/raw/main/ofl/outfit/Outfit%5Bwght%5D.ttf"
+            r = requests.get(url, timeout=30)
+            with open(FONT_PATH, "wb") as f:
+                f.write(r.content)
+        return ImageFont.truetype(str(FONT_PATH), size)
+    except Exception as e:
+        logger.warning("Font download failed: %s", e)
+
+    # 4. Last resort (will be very small and not scalable)
     logger.warning("!!! CRITICAL: No TTF fonts found. Text will be 10px and likely INVISIBLE on high-res images.")
     return ImageFont.load_default()
 
@@ -301,9 +315,34 @@ STYLES = {
 
 def apply_random_style(img_path: Path, quote: str, run_id: str) -> Path:
     """Pick a random style, apply it, return output path."""
-    style_key = random.choice(list(STYLES.keys()))
+    available_styles = list(STYLES.keys())
+    style_key = random.choice(available_styles)
+    
+    # Check if rembg is available for Style B
+    try:
+        import rembg # noqa: F401
+    except ImportError:
+        if style_key == "B":
+            logger.info("Style B chosen but rembg missing. Forcing Style A or C.")
+            style_key = random.choice(["A", "C"])
+
     style_fn = STYLES[style_key]
     OUTPUT_DIR.mkdir(exist_ok=True)
     out_path = OUTPUT_DIR / f"final_{run_id}_style{style_key}.jpg"
-    logger.info("Applying Style %s …", style_key)
-    return style_fn(img_path, quote, out_path)
+    
+    logger.info("🎨 APPLYING STYLE: %s", style_key)
+    
+    result_path = style_fn(img_path, quote, out_path)
+    
+    # Final watermark on the finished file
+    try:
+        final_img = Image.open(result_path).convert("RGB")
+        d = ImageDraw.Draw(final_img)
+        # Use a big red box for the watermark so it's impossible to miss
+        d.rectangle([0, 0, 300, 40], fill=(255, 0, 0))
+        d.text((10, 10), f"STYLE {style_key} ACTIVE", fill=(255, 255, 255))
+        final_img.save(result_path, "JPEG", quality=95)
+    except Exception as e:
+        logger.error("Watermark failed: %s", e)
+        
+    return result_path
