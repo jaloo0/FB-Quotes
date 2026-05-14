@@ -19,7 +19,7 @@ OUTPUT_DIR = Path("tmp_assets")
 
 
 def _headers() -> dict:
-    key = os.environ["0jLwGK5756dGwhuCi2X5MduOZAZ7nnxb3mmwORYUR5K1LU81C9BZ80cN"]
+    key = os.environ["PEXELS_API_KEY"]
     return {"Authorization": key}
 
 
