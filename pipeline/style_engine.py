@@ -220,21 +220,24 @@ STYLES = {
     "GiantInvert": style_giant_invert,
 }
 
-def apply_random_style(img_path: Path, quote: str, run_id: str) -> Path:
-    """Pick a random style, apply it, return output path."""
-    style_key = random.choice(list(STYLES.keys()))
-    style_fn = STYLES[style_key]
+def apply_random_style(img_path: Path, quote: str, run_id: str, style_key: str = None) -> Path:
+    """
+    Applies the specified visual style, or selects one based on guidelines
+    if none is provided.
+    """
+    if not style_key:
+        char_count = len(quote)
+        if char_count < 15:
+            style_key = "GiantInvert"
+        elif char_count <= 40:
+            style_key = "BigLeft"
+        else:
+            style_key = "CinematicSub"
     
+    style_fn = STYLES[style_key]
     OUTPUT_DIR.mkdir(exist_ok=True)
     out_path = OUTPUT_DIR / f"final_{run_id}_{style_key}.jpg"
     
     logger.info("🎨 Applying Style: %s", style_key)
     result = style_fn(img_path, quote, out_path)
-    
-    # Add a tiny debug watermark if needed (can be removed later)
-    # final_img = Image.open(result).convert("RGB")
-    # d = ImageDraw.Draw(final_img)
-    # d.text((10, 10), style_key, fill=(255, 0, 0))
-    # final_img.save(result)
-    
     return result

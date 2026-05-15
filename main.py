@@ -54,9 +54,11 @@ def run():
     run_id = uuid.uuid4().hex[:8]
     logger.info("━━━ Run %s started ━━━", run_id)
 
-    # ── 1. Roll Vibe ──────────────────────────────────────────────────────────
+    # ── 1. Roll Vibe & Style ──────────────────────────────────────────────────
     vibe = roll_vibe()
-    logger.info("Vibe rolled: %s", vibe)
+    # Pick a target visual style first
+    style_key = random.choice(["GiantInvert", "BigLeft", "CinematicSub"])
+    logger.info("Vibe: %s | Target Style: %s", vibe, style_key)
 
     # ── 2. Fetch Image ────────────────────────────────────────────────────────
     query = get_search_term(vibe)
@@ -74,17 +76,17 @@ def run():
     img_path, tags = result
     logger.info("Image: %s | Tags: %s", img_path, tags)
 
-    # ── 3. Generate Quote ─────────────────────────────────────────────────────
-    # Pick a seed + closer from local library first
+    # ── 3. Generate Quote (Specific to Style) ─────────────────────────────────
     vibe_data = VIBES[vibe]
     seed = random.choice(vibe_data["quote_seeds"])
     closer = random.choice(vibe_data["closers"])
 
-    quote = get_ai_quote(seed=seed, tags=tags, vibe=vibe, closer=closer)
-    logger.info("Quote: %r", quote)
+    # Pass style_key to AI so it writes the correct length/tone
+    quote = get_ai_quote(seed=seed, tags=tags, vibe=vibe, closer=closer, style_key=style_key)
+    logger.info("Quote (%d chars): %r", len(quote), quote)
 
     # ── 4. Apply Visual Style ─────────────────────────────────────────────────
-    final_img = apply_random_style(img_path, quote, run_id)
+    final_img = apply_random_style(img_path, quote, run_id, style_key=style_key)
     logger.info("Final image: %s", final_img)
 
     # ── 5. Upload to Temp Storage ─────────────────────────────────────────────
