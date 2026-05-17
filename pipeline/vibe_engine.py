@@ -10,15 +10,15 @@ import random
 VIBES = {
     "Defeat": {
         "search_terms": [
-            "dark cinematic rain",
-            "gloomy abandoned street",
-            "silhouette alone fog",
+            "dark cinematic rain night",
+            "gloomy abandoned street night",
+            "silhouette alone fog night",
             "empty road night",
-            "broken glass dark",
+            "broken glass dark noir",
         ],
         "tag_hints": [
             "dark", "alone", "rain", "fog", "shadow", "gloomy",
-            "abandoned", "sad", "night", "empty",
+            "abandoned", "sad", "night", "empty", "noir",
         ],
         "quote_seeds": [
             "damn, i lost",
@@ -37,11 +37,11 @@ VIBES = {
     },
     "Resilience": {
         "search_terms": [
-            "hero silhouette sunrise",
-            "lone warrior cinematic",
-            "man standing storm",
-            "comeback road cinematic",
-            "rising figure dramatic light",
+            "hero silhouette dark sunrise",
+            "lone warrior cinematic night",
+            "man standing storm night",
+            "comeback road dark cinematic",
+            "rising figure dark dramatic light",
         ],
         "tag_hints": [
             "hero", "strong", "sunrise", "light", "power",
@@ -125,8 +125,9 @@ def roll_vibe() -> str:
 
 
 def get_search_term(vibe: str) -> str:
-    """Pick a random Pexels search term for the given vibe."""
-    return random.choice(VIBES[vibe]["search_terms"])
+    """Pick a random Pexels search term for the given vibe, enforcing a dark aesthetic."""
+    base_term = random.choice(VIBES[vibe]["search_terms"])
+    return f"{base_term} dark moody low light"
 
 
 def get_quote(vibe: str, ai_tags: list[str] | None = None) -> str:
