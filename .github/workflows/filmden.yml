@@ -2,7 +2,7 @@ name: Filmden Automated Workflow
 
 on:
   schedule:
-    - cron: '0 0 * * *' # Runs daily at midnight
+    - cron: '0 0 * * *' # Runs daily at midnight UTC
   workflow_dispatch:      # Allows manual trigger
 
 permissions:
@@ -27,13 +27,12 @@ jobs:
 
       - name: Run Filmden
         env:
-          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          TMDB_API_READ_TOKEN: ${{ secrets.TMDB_API_READ_TOKEN }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
           FB_PAGE_ACCESS_TOKEN: ${{ secrets.FB_PAGE_ACCESS_TOKEN }}
-          YT_API_KEY: ${{ secrets.YT_API_KEY }}
-          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
-          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
         run: python -m filmden.main
 
       - name: Commit Database Changes
@@ -41,5 +40,4 @@ jobs:
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git add filmden/movies_db.sqlite
-          # Only commit and push if there are changes
           git diff --quiet && git diff --staged --quiet || (git commit -m "chore: update filmden database [skip ci]" && git push)
