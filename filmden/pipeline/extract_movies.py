@@ -124,6 +124,8 @@ def process_pending_videos():
         logger.info("No pending videos to extract movies from.")
         return
 
+    import time
+
     for row in rows:
         video_id = row["video_id"]
         playlist_id = row["playlist_id"]
@@ -133,6 +135,9 @@ def process_pending_videos():
         
         # Mark as using while we process
         mark_video(video_id, status="using")
+
+        # 10s break to avoid YouTube rate limit/IP block
+        time.sleep(10)
 
         transcript = fetch_transcript(video_id)
         if not transcript:
