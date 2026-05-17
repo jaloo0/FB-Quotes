@@ -16,32 +16,53 @@ FREE_MODELS = [
     "mistralai/mistral-7b-instruct:free"
 ]
 
-def fetch_transcript(video_id: str) -> str | None:
-    """Fetches the transcript for a video using youtube-transcript-api."""
-    try:
-        # Fetch transcript, prioritizing Hindi ('hi') or English ('en')
-        ytt_api = YouTubeTranscriptApi()
-        transcript_list = ytt_api.list(video_id)
-        
-        # Try to find a Hindi transcript first, then fallback to English
-        transcript = None
-        try:
-            transcript = transcript_list.find_transcript(['hi', 'en'])
-        except Exception:
-            # If neither is found explicitly, just grab the first one available and translate it
-            for t in transcript_list:
-                transcript = t.translate('en')
-                break
+# from youtube_transcript_api import YouTubeTranscriptApi
 
-        # Actually fetch the data
-        data = transcript.fetch()
-        
-        # Combine text (data contains FetchedTranscriptSnippet objects)
-        full_text = " ".join([getattr(item, 'text', '') for item in data])
+def fetch_transcript(video_id: str) -> str | None:
+    """Fetches the transcript for a video using RapidAPI to bypass IP blocks."""
+    api_key = os.getenv("RAPIDAPI_KEY")
+    if not api_key:
+        logger.error("RAPIDAPI_KEY is not set.")
+        return None
+
+    try:
+        url = "https://youtube-transcripts.p.rapidapi.com/youtube/transcript"
+        # We request lang=en because OpenRouter model expects English,
+        # but the API might handle translation or fetching the available one.
+        # text=true returns a single string in the 'content' field.
+        querystring = {
+            "url": f"https://www.youtube.com/watch?v={video_id}",
+            "videoId": video_id,
+            "chunkSize": "500",
+            "text": "true",
+            "lang": "en"
+        }
+        headers = {
+            "x-rapidapi-host": "youtube-transcripts.p.rapidapi.com",
+            "x-rapidapi-key": api_key,
+            "Content-Type": "application/json"
+        }
+
+        response = requests.get(url, headers=headers, params=querystring, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+
+        content = data.get("content")
+        if not content:
+            logger.warning("No transcript content found for video %s", video_id)
+            return None
+
+        # When text=true, content is usually a single string.
+        # If it's a list for some reason, join it.
+        if isinstance(content, list):
+            full_text = " ".join([str(item) for item in content])
+        else:
+            full_text = str(content)
+
         return full_text
 
     except Exception as e:
-        logger.error("Failed to fetch transcript for video %s: %s", video_id, e)
+        logger.error("Failed to fetch transcript for video %s via RapidAPI: %s", video_id, e)
         return None
 
 def extract_movies_via_ai(transcript_text: str) -> list[dict] | None:
