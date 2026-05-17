@@ -27,20 +27,10 @@ def fetch_transcript(video_id: str) -> str | None:
 
     try:
         url = "https://youtube-transcripts.p.rapidapi.com/youtube/transcript"
-        # We request lang=en because OpenRouter model expects English,
-        # but the API might handle translation or fetching the available one.
-        # text=true returns a single string in the 'content' field.
-        querystring = {
-            "url": f"https://www.youtube.com/watch?v={video_id}",
-            "videoId": video_id,
-            "chunkSize": "500",
-            "text": "true",
-            "lang": "en"
-        }
+        querystring = {"url": f"https://www.youtube.com/watch?v={video_id}"}
         headers = {
             "x-rapidapi-host": "youtube-transcripts.p.rapidapi.com",
-            "x-rapidapi-key": api_key,
-            "Content-Type": "application/json"
+            "x-rapidapi-key": api_key
         }
 
         response = requests.get(url, headers=headers, params=querystring, timeout=30)
@@ -49,13 +39,19 @@ def fetch_transcript(video_id: str) -> str | None:
 
         content = data.get("content")
         if not content:
-            logger.warning("No transcript content found for video %s", video_id)
+            logger.warning("No transcript content found for video %s. Response: %s", video_id, data)
             return None
 
-        # When text=true, content is usually a single string.
-        # If it's a list for some reason, join it.
+        # Parse the transcript blocks
         if isinstance(content, list):
-            full_text = " ".join([str(item) for item in content])
+            # The API formats blocks inside a 'content' key list containing dicts with 'text'
+            lines = []
+            for entry in content:
+                if isinstance(entry, dict) and "text" in entry:
+                    lines.append(entry["text"])
+                else:
+                    lines.append(str(entry))
+            full_text = " ".join(lines)
         else:
             full_text = str(content)
 
