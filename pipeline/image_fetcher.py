@@ -12,14 +12,14 @@ import requests
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
-
+PEXELS_API_KEY = "0jLwGK5756dGwhuCi2X5MduOZAZ7nnxb3mmwORYUR5K1LU81C9BZ80cN"
 PEXELS_BASE = "https://api.pexels.com/v1/search"
 PEXELS_VIDEO_BASE = "https://api.pexels.com/videos/search"   # not used, future
 OUTPUT_DIR = Path("tmp_assets")
 
 
 def _headers() -> dict:
-    key = os.environ["PEXELS_API_KEY"]
+    key = os.environ.get("PEXELS_API_KEY", PEXELS_API_KEY)
     return {"Authorization": key}
 
 
