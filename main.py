@@ -14,12 +14,19 @@ Orchestrator – runs the full pipeline end-to-end:
 import logging
 import random
 import shutil
+import sys
 import uuid
 from pathlib import Path
 from dotenv import load_dotenv
 
 # Load local .env file if it exists
 load_dotenv()
+
+if sys.platform.startswith('win'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except AttributeError:
+        pass
 
 logging.basicConfig(
     level=logging.INFO,
@@ -32,6 +39,7 @@ from pipeline.vibe_engine import (
     get_search_term,
     get_quote,
     tags_match_vibe,
+    get_unused_seed,
     VIBES,
 )
 from pipeline.image_fetcher import fetch_image_for_vibe
@@ -78,7 +86,7 @@ def run():
 
     # ── 3. Generate Quote (Specific to Style) ─────────────────────────────────
     vibe_data = VIBES[vibe]
-    seed = random.choice(vibe_data["quote_seeds"])
+    seed = get_unused_seed(vibe, tags)
     closer = random.choice(vibe_data["closers"])
 
     # Pass style_key to AI so it writes the correct length/tone

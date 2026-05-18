@@ -21,7 +21,14 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("dry_run")
 
-from pipeline.vibe_engine import roll_vibe, get_search_term, get_quote, tags_match_vibe, VIBES
+import sys
+if sys.platform.startswith('win'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except AttributeError:
+        pass
+
+from pipeline.vibe_engine import roll_vibe, get_search_term, get_quote, tags_match_vibe, get_unused_seed, VIBES
 from pipeline.image_fetcher import fetch_image_for_vibe
 from pipeline.ai_quote_finisher import get_ai_quote
 from pipeline.style_engine import (
@@ -54,9 +61,9 @@ def main():
     logger.info("Image: %s | Tags: %s", img_path, tags[:10])
 
     vibe_data = VIBES[vibe]
-    seed = random.choice(vibe_data["quote_seeds"])
+    seed = get_unused_seed(vibe, tags)
     closer = random.choice(vibe_data["closers"])
-    quote = get_ai_quote(seed=seed, tags=tags, vibe=vibe, closer=closer)
+    quote = get_ai_quote(seed=seed, tags=tags, vibe=vibe, closer=closer, style_key="CinematicSub")
     logger.info("Quote: %r", quote)
 
     run_id = uuid.uuid4().hex[:8]

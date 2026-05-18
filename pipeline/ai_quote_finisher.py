@@ -11,6 +11,7 @@ OpenRouter is OpenAI-compatible — no extra package needed beyond requests.
 import os
 import logging
 import random
+import re
 import requests
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,66 @@ FREE_MODELS = [
     "google/gemma-3-27b-it:free",                # Good fallback
     "mistralai/mistral-7b-instruct:free",        # Lightweight fallback
 ]
+
+
+def _clean_quote_text(text: str) -> str:
+    """
+    Cleans up any stubborn typos or grammar issues from the AI output.
+    Specifically targets:
+      - 'quite' instead of 'quiet' (e.g. quite money -> quiet money, quite people -> quiet people, etc.)
+      - Subject-verb agreement (e.g. quiet people knows -> quiet people know, people knows -> people know)
+      - Strips accidental extra quotes and excessive whitespace.
+    """
+    if not text:
+        return text
+
+    # Strip surrounding quotes and whitespace
+    text = text.strip().strip('"').strip("'").strip()
+
+    # Define common typo corrections (case-insensitive regex)
+    replacements = {
+        r"\bquite\s+money\b": "quiet money",
+        r"\bquite\s+people\b": "quiet people",
+        r"\bquite\s+ones\b": "quiet ones",
+        r"\bquite\s+one\b": "quiet one",
+        r"\bquite\s+moment\b": "quiet moment",
+        r"\bquite\s+place\b": "quiet place",
+        r"\bquite\s+room\b": "quiet room",
+        r"\bquite\s+night\b": "quiet night",
+        r"\bquite\s+exit\b": "quiet exit",
+        r"\bquite\s+life\b": "quiet life",
+        r"\bquite\s+side\b": "quiet side",
+        r"\bquite\s+man\b": "quiet man",
+        r"\bquite\s+woman\b": "quiet woman",
+        r"\bquite\s+warrior\b": "quiet warrior",
+        r"^quite\s+": "quiet ",
+        r"\bquite\s+enough\b": "quiet enough",
+        
+        # Subject-verb agreement corrections:
+        r"\bpeople\s+knows\b": "people know",
+        r"\bpeople\s+has\b": "people have",
+        r"\bpeople\s+is\b": "people are",
+        r"\bthe\s+quiet\s+ones\s+knows\b": "the quiet ones know",
+        r"\bthe\s+quiet\s+ones\s+has\b": "the quiet ones have",
+        r"\bthe\s+quiet\s+ones\s+is\b": "the quiet ones are",
+        r"\bones\s+always\s+knows\b": "ones always know",
+        
+        # General typo 'quite' when used at end of clause / as predicate:
+        r"\bis\s+quite\b": "is quiet",
+        r"\bbe\s+quite\b": "be quiet",
+        r"\bthis\s+quite\b": "this quiet",
+        r"\bso\s+quite\b": "so quiet",
+        r"\bvery\s+quite\b": "very quiet",
+        r"\btoo\s+quite\b": "too quiet",
+    }
+
+    cleaned = text
+    for pattern, repl in replacements.items():
+        cleaned = re.sub(pattern, repl, cleaned, flags=re.IGNORECASE)
+
+    # Strip any stray leading/trailing quotes
+    cleaned = cleaned.strip('"').strip("'").strip()
+    return cleaned
 
 
 def _openrouter_finish(seed: str, tags: list[str], vibe: str, style_key: str) -> str | None:
@@ -61,6 +122,11 @@ def _openrouter_finish(seed: str, tags: list[str], vibe: str, style_key: str) ->
         f"Mood Context: {vibe} ({tag_str})\n"
         f"Seed: \"{seed}\"\n\n"
         f"MANDATORY INSTRUCTIONS:\n{style_instruction}\n\n"
+        f"CRITICAL QUALITY RULES:\n"
+        f"- Ensure flawless spelling, grammar, and sentence structure.\n"
+        f"- NEVER confuse the word 'quiet' (silent, calm, stillness) with 'quite' (completely, very). If you write about sound level, silence, or calm, ALWAYS write 'quiet' (e.g. 'quiet money', 'quiet people', 'quiet ones', 'quiet exit').\n"
+        f"- Ensure subject-verb agreement (e.g., 'people know' NOT 'people knows', 'ones know' NOT 'ones knows').\n"
+        f"- Avoid clichés or directly echoing the seed word-for-word if it makes the caption repetitive or grammatically awkward.\n\n"
         f"Return ONLY the caption text. No hashtags. No quotes."
     )
 
@@ -87,7 +153,7 @@ def _openrouter_finish(seed: str, tags: list[str], vibe: str, style_key: str) ->
             )
             resp.raise_for_status()
             text = resp.json()["choices"][0]["message"]["content"].strip()
-            text = text.strip('"').strip("'")
+            text = _clean_quote_text(text)
             
             # Simple validation: if it doesn't meet the length, try next model/retry
             if style_key == "GiantInvert" and len(text) > 20: continue
@@ -102,16 +168,19 @@ def _openrouter_finish(seed: str, tags: list[str], vibe: str, style_key: str) ->
     return None
 
 
-def get_ai_quote(seed: str, tags: list[str], vibe: str, closer: str, style_key: str) -> str:
+def get_ai_quote(seed: str, tags: list[str], vibe: str, closer: str, style_key: str = "CinematicSub") -> str:
     """
     Try OpenRouter AI first; if all models fail, assemble locally.
     Returns the final caption string.
     """
     result = _openrouter_finish(seed, tags, vibe, style_key)
     if result:
-        return result
+        return _clean_quote_text(result)
 
     # Local fallback
     if style_key == "GiantInvert":
-        return seed.lower() if "lowercase" in vibe.lower() else seed.upper()
-    return f"{seed} {closer}"
+        local_quote = seed.lower() if "lowercase" in vibe.lower() else seed.upper()
+    else:
+        local_quote = f"{seed} {closer}"
+        
+    return _clean_quote_text(local_quote)
