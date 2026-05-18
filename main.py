@@ -19,8 +19,9 @@ import uuid
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load local .env file if it exists
-load_dotenv()
+# Load local .env file from project root explicitly
+env_path = Path(__file__).resolve().parent / ".env"
+load_dotenv(dotenv_path=env_path)
 
 if sys.platform.startswith('win'):
     try:
