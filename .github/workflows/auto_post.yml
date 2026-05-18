@@ -2,9 +2,12 @@ name: 🎨 FB Quotes Auto-Post
 
 on:
   schedule:
-    # Run every 12 hours  (00:00 UTC and 12:00 UTC)
-    - cron: "0 0,12 * * *"
+    # Run at active hours in Pakistan (10:00 AM PKT -> 05:00 UTC, and 09:00 PM PKT -> 16:00 UTC)
+    - cron: "0 5,16 * * *"
   workflow_dispatch: {}    # Manual trigger from GitHub UI
+
+permissions:
+  contents: write
 
 jobs:
   post:
@@ -43,6 +46,15 @@ jobs:
           FB_PAGE_ID:            ${{ secrets.FB_PAGE_ID }}
           FB_PAGE_ACCESS_TOKEN:  ${{ secrets.FB_PAGE_ACCESS_TOKEN }}
         run: python main.py
+
+      # ── Commit history updates ──────────────────────────────────────────────
+      - name: Commit history updates
+        if: success()
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add pipeline/assets/used_quotes.json
+          git diff --quiet && git diff --staged --quiet || (git commit -m "chore: update quote history [skip ci]" && git push)
 
       # ── Upload artefact on failure (debug) ──────────────────────────────────
       - name: Upload tmp_assets on failure
