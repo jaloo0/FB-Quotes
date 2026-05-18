@@ -21,10 +21,11 @@ OPENROUTER_BASE = "https://openrouter.ai/api/v1/chat/completions"
 # Free models on OpenRouter, tried in order until one succeeds.
 # All are strong at short creative writing.
 FREE_MODELS = [
-    "meta-llama/llama-3.3-70b-instruct:free",   # Best all-round writer
-    "deepseek/deepseek-chat-v3-0324:free",       # Excellent at stylised text
-    "google/gemma-3-27b-it:free",                # Good fallback
-    "mistralai/mistral-7b-instruct:free",        # Lightweight fallback
+    "openrouter/free",                           # Auto-routes dynamically to the best active free model!
+    "meta-llama/llama-3.3-70b-instruct:free",   # Premium Meta model fallback
+    "deepseek/deepseek-chat:free",               # Standard DeepSeek chat model
+    "google/gemma-2-9b-it:free",                 # Google Gemma 2 9B fallback
+    "mistralai/mistral-7b-instruct:free",        # Mistral fallback
 ]
 
 
